@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block title %}Map{% endblock %}
+
+{% block extra_head %}
+<style>
+    #map { height: 600px; width: 100%; margin-top: 10px; }
+    #status { margin-top: 8px; font-size: 13px; color: #555; }
+</style>
+{% endblock %}
+
+{% block content %}
+<h2>Click on the map to save a point</h2>
+<div id="map"></div>
+<p id="status"></p>
+{{ points_data|json_script:"points-data" }}
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    const POINTS_URL = "{% url 'map' %}";
+    const CSRF_TOKEN = "{{ csrf_token }}";
+    const INITIAL_POINTS = JSON.parse(document.getElementById("points-data").textContent);
+
+    const map = L.map("map", { attributionControl: false }).setView([51.505, -0.09], 5);
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(map);
+
+    INITIAL_POINTS.forEach(function (point) {
+        L.marker([point.latitude, point.longitude]).addTo(map);
+    });
+
+    async function savePoint(lat, lng) {
+        const status = document.getElementById("status");
+        status.textContent = "Saving...";
+
+        const response = await fetch(POINTS_URL, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-CSRFToken": CSRF_TOKEN,
+            },
+            body: JSON.stringify({ latitude: lat, longitude: lng }),
+        });
+
+        if (response.ok) {
+            status.textContent = `Saved: (${lat.toFixed(5)}, ${lng.toFixed(5)})`;
+            return true;
+        } else {
+            const data = await response.json();
+            status.textContent = `Error: ${data.error}`;
+            return false;
+        }
+    }
+
+    map.on("click", async function (e) {
+        const { lat, lng } = e.latlng;
+        const marker = L.marker([lat, lng]).addTo(map);
+        const saved = await savePoint(lat, lng);
+        if (!saved) {
+            map.removeLayer(marker);
+        }
+    });
+</script>
+{% endblock %}
